@@ -1,0 +1,38 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.csproj.user
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
+
+# Test / coverage output
+TestResults/
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local configuration / secrets
+.env
+.env.*
+!.env.example
+appsettings.local.json
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
