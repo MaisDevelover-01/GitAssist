@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using GitAssist.Models;
 using GitAssist.Bot;
 using System.Diagnostics.Eventing.Reader;
+using Microsoft.Extensions.Logging;
 namespace GitAssist.bot;
 
 public class CommandHandler
@@ -13,10 +14,12 @@ public class CommandHandler
     private readonly ITelegramBotClient _bot;
     private readonly IGitHubService _gitHubService;
     private readonly ConcurrentDictionary<long, UserSession> _userSession = new();
-    public CommandHandler(ITelegramBotClient bot, IGitHubService gitHubService)
+    private readonly ILogger<CommandHandler> _logger;
+    public CommandHandler(ITelegramBotClient bot, IGitHubService gitHubService, ILogger<CommandHandler> logger)
     {
         _bot = bot;
         _gitHubService = gitHubService;
+        _logger = logger;
     }
     //If The user has usersession give it if not make one
     private UserSession GetSession(long chatId)
@@ -39,14 +42,15 @@ public class CommandHandler
             await HandleStartAsync(message);
             return;
         }
-        if (text == "👤 GitHub Username" || text == "/username")
-        {
-            await AskForOwnerAsync(message);
-            return;
-        }
         if (text == "ℹ️ Help" || text == "/help")
         {
             await HandleHelpAsync(message);
+            return;
+        }
+        //Navigation
+        if (text == "👤 GitHub Username" || text == "/username")
+        {
+            await AskForOwnerAsync(message);
             return;
         }
         if (text == "🔄 Change Repository")
@@ -61,33 +65,35 @@ public class CommandHandler
         }
         //State Handling
         var session = GetSession(message.Chat.Id);
+
         switch (session.State)
         {
             case UserState.WaitingForOwner:
                 await ShowRepositoriesForOwnerAsync(message, text);
                 return;
+
             case UserState.WaitingForRepository:
                 await HandleRepositorySelectionAsync(message, text);
                 return;
         }
-        
         //Repository Actions
         if (text == "🐛 Issues" )
         {
-            await HandleIssuesAsync(message, text);
+            await HandleIssuesAsync(message.Chat.Id);
             return;
         }
         
         if (text == "🔀 Pull Requests" || text == "/prs")
         {
-            await HandlePullRequestsAsync(message);
+            await HandlePullRequestsAsync(message.Chat.Id);
             return;
         }
         if(text == "📝 Commits")
         {
-            await HandleCommitsAsync(message);
+            await HandleCommitsAsync(message.Chat.Id);
             return;
         }
+        //Unkown
         await _bot.SendMessage(message.Chat.Id, "🤔 I don't know that command yet.");
     }
 
@@ -169,53 +175,77 @@ public class CommandHandler
             replyMarkup: reply
         );
     }
-
     // Receive GitHub username 
-    private async Task ShowRepositoriesForOwnerAsync(Message message, string owner)
+    private async Task ShowRepositoriesForOwnerAsync(Message message, string owner, int page = 1)
     {
-        var repositories = await _gitHubService.GetRepositoriesAsync(owner);
-
-        if (repositories.Count == 0)
+        var result = await _gitHubService.GetRepositoriesAsync(owner, page);
+        if (result.Items.Count == 0)
         {
-            await _bot.SendMessage(message.Chat.Id,
-            """
-            ❌ I couldn't find any public repositories.
-
-            Please check the GitHub username and try again.
-            """
+            await _bot.SendMessage(message.Chat.Id, page == 1
+                    ? $"❌ No repositories found for `{owner}`."
+                    : "❌ No more repositories."
             );
             return;
         }
         var session = GetSession(message.Chat.Id);
         session.PendingOwner = owner;
         session.State = UserState.WaitingForRepository;
-        var buttons = new List<List<KeyboardButton>>();
-        for (int i = 0; i < repositories.Count; i += 2)
+        var buttons = new List<List<InlineKeyboardButton>>();
+        for (int i = 0; i < result.Items.Count; i += 2)
         {
-            var row = new List<KeyboardButton>
+            var row = new List<InlineKeyboardButton>
             {
-                new KeyboardButton(repositories[i].Name)
+                InlineKeyboardButton.WithCallbackData(
+                    result.Items[i].Name,
+                    $"repo:{result.Items[i].Name}"
+                )
             };
-            if (i + 1 < repositories.Count)
+
+            if (i + 1 < result.Items.Count)
             {
-                row.Add(new KeyboardButton(repositories[i + 1].Name));
+                row.Add(InlineKeyboardButton.WithCallbackData(
+                        result.Items[i + 1].Name,
+                        $"repo:{result.Items[i + 1].Name}"
+                    )
+                );
             }
             buttons.Add(row);
         }
-        // Change Owner button
+        var navigation = new List<InlineKeyboardButton>();
+        if (page > 1)
+        {
+            navigation.Add(InlineKeyboardButton.WithCallbackData(
+                    "⬅️ Previous",
+                    $"repos:page:{page - 1}"
+                )
+            );
+        }
+        if (result.HasNext)
+        {
+            navigation.Add(InlineKeyboardButton.WithCallbackData(
+                    "Next ➡️",
+                    $"repos:page:{page + 1}"
+                )
+            );
+        }
+        if (navigation.Count > 0)
+        {
+            buttons.Add(navigation);
+        }
         buttons.Add(
         [
-            new KeyboardButton("👤 Change Owner")
+            InlineKeyboardButton.WithCallbackData(
+                "👤 Change Owner",
+                "repo:change_owner"
+            )
         ]);
-        var keyboard = new ReplyKeyboardMarkup(buttons)
-        {
-            ResizeKeyboard = true
-        };
-        await _bot.SendMessage(message.Chat.Id, $"📦 Repositories of {owner}\n\n" +"Choose a repository:",
-        replyMarkup: keyboard
+        var keyboard = new InlineKeyboardMarkup(buttons);
+        await _bot.SendMessage(message.Chat.Id,
+            $"📂 Repositories of `{owner}` — Page {page}\n\n" +
+            "Select a repository:",
+            replyMarkup: keyboard
         );
     }
-    
     // Receive repository selection
     private async Task HandleRepositorySelectionAsync(Message message, string repository)
     {
@@ -244,21 +274,21 @@ public class CommandHandler
             return;
         }
         // Save active repository
-        session.ActiveRepository =
-            new ActiveRepository
+        session.ActiveRepository = new ActiveRepository
             {
                 Owner = owner,
                 Repository = repository
             };
+        _logger.LogInformation("User {ChatId} selected repository {Owner}/{Repository}",message.Chat.Id, owner, repository);
         // Clear temporary state
         session.PendingOwner = null;
         session.State = UserState.None;
          // Show repository information
-        await SendRepositoryInfoAsync(message, repo);
+        await SendRepositoryInfoAsync(message.Chat.Id, repo);
     }
-    
+
      // Show repository information
-    private async Task SendRepositoryInfoAsync(Message message, RepositoryInfo repo)
+    private async Task SendRepositoryInfoAsync(long chatID, RepositoryInfo repo)
     {
         var description = string.IsNullOrWhiteSpace(repo.Description)? "No description": repo.Description;
         var language = string.IsNullOrWhiteSpace(repo.Language)? "Unknown": repo.Language;
@@ -277,7 +307,7 @@ public class CommandHandler
 
             🔗 {repo.HtmlUrl}
         """;
-        await _bot.SendMessage(message.Chat.Id, response);
+        await _bot.SendMessage(chatID, response);
         // Repository actions keyboard
         var repositoryKeyboard =
             new ReplyKeyboardMarkup(
@@ -293,11 +323,11 @@ public class CommandHandler
             [
                 new KeyboardButton("👤 Change Owner")
             ]
-        ])
+            ])
         {
             ResizeKeyboard = true
         };
-        await _bot.SendMessage(message.Chat.Id, "What would you like to explore? 👇",
+        await _bot.SendMessage(chatID, "What would you like to explore? 👇",
         replyMarkup: repositoryKeyboard
         );
     }
@@ -311,149 +341,567 @@ public class CommandHandler
         }
         await ShowRepositoriesForOwnerAsync(message, session.ActiveRepository.Owner);
     }
-    
     // Issues
-    private async Task HandleIssuesAsync(Message message, string text)
+    private async Task HandleIssuesAsync(long chatId, int page = 1) 
     {
-        if (!TryGetActiveRepository(message.Chat.Id, out var activeRepository))
+        var session = GetSession(chatId);
+        if (session.ActiveRepository is null)
         {
-            await _bot.SendMessage(message.Chat.Id,
-            """
-                ❌ No repository selected.
-
-                Please choose 📦 Repository first.
-            """
-            );
-            return;
-        }
-        var issues = await _gitHubService.GetIssueInfosAsync(activeRepository.Owner, activeRepository.Repository);
-        var openIssues = issues.Where(issue => issue.PullRequest is null).ToList();
-        if (openIssues.Count == 0)
-        {
-            await _bot.SendMessage(
-                message.Chat.Id,
-                $"🎉 No open issues found in {activeRepository.Owner}/{activeRepository.Repository}."
-            );
-            return;
-        }
-        var messageText = $"🐛 Open Issues — {activeRepository.Owner}/{activeRepository.Repository}\n\n";
-        foreach (var issue in openIssues)
-        {
-            messageText +=$"#{issue.Number} — {issue.Title}\n" +$"{issue.HtmlUrl}\n\n";
-        }
-        await _bot.SendMessage(message.Chat.Id, messageText);
-    }
-
-    // Pull Requests
-    private async Task HandlePullRequestsAsync(Message message)
-    {
-        if (!TryGetActiveRepository(message.Chat.Id, out var activeRepository))
-        {
-            await _bot.SendMessage(message.Chat.Id,
-            """
-                ❌ No repository selected.
-
-                Please choose 📦 Repository first.
-            """
-            );
-            return;
-        }
-        var pullRequests = await _gitHubService.GetPullRequestsAsync(activeRepository.Owner, activeRepository.Repository);
-        if (pullRequests.Count == 0)
-        {
-            await _bot.SendMessage( message.Chat.Id, $"🎉 No open pull requests found in " + 
-            $"{activeRepository.Owner}/" + $"{activeRepository.Repository}.");
-            return;
-        }
-        var messageText = $"🔀 Open Pull Requests — " + $"{activeRepository.Owner}/" + $"{activeRepository.Repository}\n\n";
-        foreach (var pullRequest in pullRequests)
-        {
-            var draftText =pullRequest.Draft == true? " 📝 Draft" : string.Empty;
-            messageText +=
-                $"#{pullRequest.Number} — " +
-                $"{pullRequest.Title}" +
-                $"{draftText}\n" +
-                $"{pullRequest.HtmlUrl}\n\n";
-        }
-        await _bot.SendMessage( message.Chat.Id, messageText);
-    }
-    private async Task HandleCommitsAsync(Message message)
-    {
-        var session = GetSession(message.Chat.Id);
-        if(session.ActiveRepository is null)
-        {
-            await _bot.SendMessage(
-            message.Chat.Id,
+            await _bot.SendMessage(chatId,
             """
             ❌ No repository selected.
 
             Please choose 👤 GitHub Username first.
             """
             );
-
             return;
         }
-        var commits = await _gitHubService.GetCommitsAsync(session.ActiveRepository.Owner, session.ActiveRepository.Repository);
-        if(commits.Count == 0)
+        var issues = await _gitHubService.GetIssuesAsync(session.ActiveRepository.Owner, session.ActiveRepository.Repository, page);
+        var openIssues = issues.Where(issue => issue.PullRequest is null).ToList();
+        if (openIssues.Count == 0)
         {
-             await _bot.SendMessage(
-            message.Chat.Id,
-            $"❌ No commits found in " +
-            $"{session.ActiveRepository.Owner}/" +
-            $"{session.ActiveRepository.Repository}."
+            await _bot.SendMessage(chatId, page == 1?
+            $"🎉 No open issues found in " :
+            "❌ No more issues."
             );
-
             return;
         }
-        var messageText = $"📝 Recent Commits — " +
-        $"{session.ActiveRepository.Owner}/" +
-        $"{session.ActiveRepository.Repository}\n\n";
-        foreach(var commit in commits)
+        var buttons = new List<List<InlineKeyboardButton>>();
+        foreach (var issue in openIssues)
         {
-            var shortSha = commit.Sha.Length > 7 ? commit.Sha[..7] : commit.Sha;   
-            var commitMessage = commit.Commit.Message.Split("\n")[0];
-            var author = commit.Author?.Login?? commit.Commit.Author.Name;
-            var date = commit.Commit.Author.Date?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")?? "Unknown date";
-            
-            messageText +=
-            $"🔹 {shortSha}\n" +
-            $"📝 {commitMessage}\n" +
-            $"👤 {author}\n" +
-            $"🕒 {date}\n" +
-            $"🔗 {commit.HtmlUrl}\n\n";
+            var title = TruncateText(issue.Title, 40);
+            buttons.Add(
+            [
+                new InlineKeyboardButton($"#{issue.Number} {title}", $"issue:{issue.Number}")
+            ]);
         }
-        await _bot.SendMessage(message.Chat.Id, messageText);
-    }
-    private async Task AskForRepositoryAsync(Message message)
-    {
-        var session = GetSession(message.Chat.Id);
-        session.State = UserState.WaitingForRepository;
-        var reply = new ForceReplyMarkup
+        var navigation = new List<InlineKeyboardButton>();
+        if (page > 1)
         {
-            InputFieldPlaceholder = "owner/repository"
-        };
-        await _bot.SendMessage(message.Chat.Id,
-        """
-            📦 Send me the repository.
+            navigation.Add(InlineKeyboardButton.WithCallbackData(
+                    "⬅️ Previous",
+                    $"issues:page:{page - 1}"
+                )
+            );
+        }
+        if (issues.Count >= 30)
+        {
+            navigation.Add(
+                InlineKeyboardButton.WithCallbackData(
+                    "Next ➡️",
+                    $"issues:page:{page + 1}"
+                )
+            );
+        }
 
-            Example:
-
-            dotnet/runtime
-        """,
-            replyMarkup: reply
+        if (navigation.Count > 0)
+        {
+            buttons.Add(navigation);
+        }
+        var keyboard = new InlineKeyboardMarkup(buttons);
+        await _bot.SendMessage(chatId,
+        $"🐛 Open Issues — " +
+        $"{session.ActiveRepository.Owner}/" +
+        $"{session.ActiveRepository.Repository}\n\n" +
+        "Choose an issue:",
+        replyMarkup: keyboard
         );
     }
-
-    // Active Repository
-    private bool TryGetActiveRepository(long chatId, out ActiveRepository repository)
+    private async Task HandleIssueDetailsAsync(long chatId, int issueNumber)
     {
         var session = GetSession(chatId);
-        if(session.ActiveRepository is null)
+        if (session.ActiveRepository is null)
         {
-            repository = null;
-            return false;
+            await _bot.SendMessage(chatId,
+            "❌ No repository selected."
+            );
+            return;
         }
-        repository = session.ActiveRepository;
-        return true;
+        var issue =await _gitHubService.GetIssueAsync(session.ActiveRepository.Owner, session.ActiveRepository.Repository, issueNumber);        
+        if (issue is null)
+        {
+            await _bot.SendMessage(chatId,
+            "❌ Issue not found.");
+            return;
+        }
+        var author =issue.User?.Login?? "Unknown";
+        var labels =issue.Labels.Count > 0? string.Join(", ",issue.Labels.Select(label => label.Name)): "None";
+
+        var body =string.IsNullOrWhiteSpace(issue.Body)? "No description.": TruncateText(issue.Body, 2500);
+        var created =issue.CreatedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")?? "Unknown";
+        var updated =issue.UpdatedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")?? "Unknown";
+        var text =
+            $"""
+            🐛 #{issue.Number} — {issue.Title}
+
+            📌 State: {issue.State}
+            👤 Author: {author}
+            💬 Comments: {issue.Comments}
+            🏷 Labels: {labels}
+
+            📅 Created: {created}
+            🕒 Updated: {updated}
+
+            📝 Description:
+
+            {body}
+            """;
+
+        var keyboard = new InlineKeyboardMarkup(
+            [
+                [
+                    new InlineKeyboardButton("🔗 Open on GitHub",issue.HtmlUrl)
+                ],
+                [
+                    new InlineKeyboardButton( "⬅ Back to Issues", "issues:list")
+                ]
+            ]
+        );
+        await _bot.SendMessage(chatId, text, replyMarkup: keyboard);
+    }
+    // Pull Requests
+    private async Task HandlePullRequestsAsync(long chatId, int page = 1)
+    {
+        var session = GetSession(chatId);
+        if (session.ActiveRepository is null)
+        {
+            await _bot.SendMessage(chatId,
+                """
+                ❌ No repository selected.
+
+                Please choose 👤 GitHub Username first.
+                """
+            );
+            return;
+        }
+
+        var result = await _gitHubService.GetPullRequestsAsync(session.ActiveRepository.Owner, session.ActiveRepository.Repository, page);
+        var pullRequests = result.Items;
+        if (pullRequests.Count == 0)
+        {
+            await _bot.SendMessage(chatId, page == 1
+                    ? $"🎉 No open pull requests found in {session.ActiveRepository.Owner}/{session.ActiveRepository.Repository}."
+                    : "❌ No more pull requests."
+            );
+            return;
+        }
+        var buttons = new List<List<InlineKeyboardButton>>();
+        foreach (var pullRequest in pullRequests)
+        {
+            var title = TruncateText(pullRequest.Title, 40);
+            buttons.Add(
+            [
+                InlineKeyboardButton.WithCallbackData(
+                    $"#{pullRequest.Number} {title}",
+                    $"pr:{pullRequest.Number}"
+                )
+            ]);
+        }
+        var navigation = new List<InlineKeyboardButton>();
+        if (page > 1)
+        {
+            navigation.Add(InlineKeyboardButton.WithCallbackData(
+                    "⬅️ Previous",
+                    $"prs:page:{page - 1}"
+                )
+            );
+        }
+        if (result.HasNext)
+        {
+            navigation.Add(InlineKeyboardButton.WithCallbackData(
+                    "Next ➡️",
+                    $"prs:page:{page + 1}"
+                )
+            );
+        }
+        if (navigation.Count > 0)
+        {
+            buttons.Add(navigation);
+        }
+        buttons.Add(
+        [
+            InlineKeyboardButton.WithCallbackData(
+                "◀️ Back",
+                "back:repository"
+            )
+        ]);
+        var keyboard = new InlineKeyboardMarkup(buttons);
+        await _bot.SendMessage(chatId,
+            $"🔀 Pull Requests — " +
+            $"{session.ActiveRepository.Owner}/" +
+            $"{session.ActiveRepository.Repository}\n\n" +
+            "Choose a pull request:",
+            replyMarkup: keyboard
+        );
+    }
+    private async Task HandlePullRequestDetailsAsync(long chatId, int pullNumber)
+    {
+        var session = GetSession(chatId);
+        if (session.ActiveRepository is null)
+        {
+            await _bot.SendMessage(chatId,
+            "❌ No repository selected."
+            );
+            return;
+        }
+        var activeRepository = session.ActiveRepository;
+        var pullRequest =
+        await _gitHubService.GetPullRequestAsync(activeRepository.Owner, activeRepository.Repository, pullNumber);
+        if (pullRequest is null)
+        {
+            await _bot.SendMessage(chatId,
+            "❌ Pull request not found."
+            );
+            return;
+        }
+        var author =pullRequest.User?.Login?? "Unknown";
+        var headBranch = pullRequest.Head?.Ref?? "Unknown";
+        var baseBranch = pullRequest.Base?.Ref?? "Unknown";
+        var status = pullRequest.Merged? "🟣 Merged" : pullRequest.State == "open"? "🟢 Open" : "🔴 Closed";
+        var mergeable = pullRequest.Mergeable switch
+        {
+            true => "✅ Yes",
+            false => "❌ No",
+            null => "⏳ Unknown",
+        };
+        var body = string.IsNullOrWhiteSpace(pullRequest.Body) ? "No Description." : TruncateText(pullRequest.Body, 2500);
+        var created =pullRequest.CreatedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "Unknown";
+        var updated =pullRequest.UpdatedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")?? "Unknown";
+        var text = 
+            $"""
+            🔀 #{pullRequest.Number} — {pullRequest.Title}
+
+            {status}
+
+            👤 Author: {author}
+
+            🌿 Head branch: {headBranch}
+            ⬇️ Base branch: {baseBranch}
+
+            📦 Commits: {pullRequest.Commits}
+            ➕ Additions: {pullRequest.Additions}
+            ➖ Deletions: {pullRequest.Deletions}
+            📄 Changed files: {pullRequest.ChangedFiles}
+
+            💬 Comments: {pullRequest.Comments}
+            💬 Review comments: {pullRequest.ReviewComments}
+
+            🔧 Mergeable: {mergeable}
+
+            📅 Created: {created}
+            🕒 Updated: {updated}
+
+            📝 Description:
+
+            {body}
+            """;
+        var keyboard = new InlineKeyboardMarkup(
+            [
+                [
+                    new InlineKeyboardButton(
+                        "🔗 Open on GitHub",
+                        pullRequest.HtmlUrl
+                    )
+                ],
+                [
+                    new InlineKeyboardButton(
+                        "⬅ Back to Pull Requests",
+                        "prs:list"
+                    )
+                ]
+            ]);
+        await _bot.SendMessage(chatId, text, replyMarkup: keyboard);
+    }   
+    private async Task HandleCommitsAsync(long chatId, int page = 1)
+    {
+        var session = GetSession(chatId);
+        if (session.ActiveRepository is null)
+        {
+            await _bot.SendMessage(chatId,
+                """
+                ❌ No repository selected.
+
+                Please choose 👤 GitHub Username first.
+                """
+            );
+            return;
+        }
+        var result = await _gitHubService.GetCommitsAsync(session.ActiveRepository.Owner, session.ActiveRepository.Repository, page);
+        var commits = result.Items;
+        if (commits.Count == 0)
+        {
+            await _bot.SendMessage(chatId, page == 1
+                    ? $"🎉 No commits found in {session.ActiveRepository.Owner}/{session.ActiveRepository.Repository}."
+                    : "❌ No more commits."
+            );
+            return;
+        }
+        var buttons = new List<List<InlineKeyboardButton>>();
+        foreach (var commit in commits)
+        {
+            var message = commit.Commit.Message.Split('\n')[0];
+            var title = TruncateText(message, 40);
+            buttons.Add(
+            [
+                InlineKeyboardButton.WithCallbackData(
+                    title,
+                    $"commit:{commit.Sha}"
+                )
+            ]);
+        }
+        var navigation = new List<InlineKeyboardButton>();
+        if (page > 1)
+        {
+            navigation.Add(InlineKeyboardButton.WithCallbackData(
+                    "⬅️ Previous",
+                    $"commits:page:{page - 1}"
+                )
+            );
+        }
+        if (result.HasNext)
+        {
+            navigation.Add(InlineKeyboardButton.WithCallbackData(
+                    "Next ➡️",
+                    $"commits:page:{page + 1}"
+                )
+            );
+        }
+        if (navigation.Count > 0)
+        {
+            buttons.Add(navigation);
+        }
+        buttons.Add(
+        [
+            InlineKeyboardButton.WithCallbackData(
+                "◀️ Back",
+                "back:repository"
+            )
+        ]);
+        var keyboard = new InlineKeyboardMarkup(buttons);
+        await _bot.SendMessage(
+            chatId,
+            $"📝 Commits — " +
+            $"{session.ActiveRepository.Owner}/" +
+            $"{session.ActiveRepository.Repository}\n\n" +
+            "Choose a commit:",
+            replyMarkup: keyboard
+        );
+    }
+    private async Task HandleCommitDetailsAsync(long chatId, string sha)
+    {
+        var session = GetSession(chatId);
+        if (session.ActiveRepository is null)
+        {
+            await _bot.SendMessage(chatId,
+                "❌ No repository selected.");
+            return;
+        }
+
+        var activeRepository =session.ActiveRepository;
+        var commit = await _gitHubService.GetCommitDetailsAsync(activeRepository.Owner, activeRepository.Repository, sha);
+        if (commit is null)
+        {
+            await _bot.SendMessage(chatId,
+                "❌ Commit not found."
+            );
+            return;
+        }
+
+        var author = commit.Author?.Login?? commit.Commit.Author.Name;
+        var message = commit.Commit.Message.Trim();
+        var shortSha = commit.Sha.Length > 7? commit.Sha[..7]: commit.Sha;
+        var date = commit.Commit.Author.Date?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")?? "Unknown";
+        var additions = commit.Stats?.Additions ?? 0;
+        var deletions =  commit.Stats?.Deletions ?? 0;
+        var total = commit.Stats?.Total ?? 0;
+        var filesText = "None";
+        if (commit.Files.Count > 0)
+        {
+            var fileLines = commit.Files.Take(15).Select(file =>
+                        $"{GetFileStatusEmoji(file.Status)} " +
+                        $"{file.Filename} " +
+                        $"➕{file.Additions} " +
+                        $"➖{file.Deletions}");
+
+            filesText =string.Join("\n", fileLines);
+        }
+
+        var text =
+            $"""
+            📝 Commit {shortSha}
+
+            👤 Author: {author}
+            🕒 Date: {date}
+
+            📊 Changes:
+            ➕ Additions: {additions}
+            ➖ Deletions: {deletions}
+            📄 Total changes: {total}
+
+            📁 Files:
+
+            {filesText}
+
+            💬 Message:
+
+            {TruncateText(message, 2500)}
+            """;
+
+        var keyboard = new InlineKeyboardMarkup(
+            [
+                [
+                    new InlineKeyboardButton("🔗 Open on GitHub", commit.HtmlUrl)
+                ],
+                [
+                    new InlineKeyboardButton("⬅ Back to Commits", "commits:list")
+                ]
+            ]);
+
+        await _bot.SendMessage(chatId, text, replyMarkup: keyboard);
+    }
+    public async Task HandleCallbackQueryAsync(CallbackQuery callbackQuery)
+    {
+        // Stop Telegram's loading indicator.
+        await _bot.AnswerCallbackQuery(callbackQuery.Id);
+        if (callbackQuery.Data is not { } data)
+        {
+            return;
+        }
+        if (callbackQuery.Message is null)
+        {
+            return;
+        }
+        var chatId = callbackQuery.Message.Chat.Id;
+        if (data.StartsWith("repos:page:",StringComparison.Ordinal))
+        {
+            var pageText = data["repos:page:".Length..];
+            if (int.TryParse(pageText, out var page))
+            {
+                var session = GetSession(callbackQuery.Message!.Chat.Id);
+                if (string.IsNullOrWhiteSpace(session.PendingOwner))
+                {
+                    await _bot.AnswerCallbackQuery(callbackQuery.Id, "Repository selection expired.");
+                    return;
+                }
+                await ShowRepositoriesForOwnerAsync(callbackQuery.Message!, session.PendingOwner, page);
+            }
+            await _bot.AnswerCallbackQuery(callbackQuery.Id);
+            return;
+        }
+        if (data.StartsWith("issue:", StringComparison.Ordinal))
+        {
+            var numberText = data["issue:".Length..];
+            if (!int.TryParse(numberText, out var issueNumber))
+            {
+                return;
+            }
+            await HandleIssueDetailsAsync(chatId, issueNumber);
+            return;
+        }
+        if (data == "issues:list")
+        {
+            await HandleIssuesAsync(chatId);
+            return;
+        }
+        if (data.StartsWith("issues:page:", StringComparison.Ordinal))
+        {
+            var pageText = data["issues:page:".Length..];
+            if (int.TryParse(pageText, out var page))
+            {
+                await HandleIssuesAsync(callbackQuery.Message.Chat.Id, page);
+            }
+            await _bot.AnswerCallbackQuery(callbackQuery.Id);
+            return;
+        }
+        if (data.StartsWith("pr:", StringComparison.Ordinal))
+        {
+            var numberText = data["pr:".Length..];
+            if (int.TryParse(numberText, out var pullNumber))
+            {
+                await HandlePullRequestDetailsAsync(callbackQuery.Message!.Chat.Id, pullNumber);
+            }
+            await _bot.AnswerCallbackQuery(callbackQuery.Id);
+            return;
+        }
+        if (data.StartsWith("prs:page:", StringComparison.Ordinal))
+        {
+            var pageText = data["prs:page:".Length..];
+            if (int.TryParse(pageText, out var page))
+            {
+                await HandlePullRequestsAsync(callbackQuery.Message!.Chat.Id, page);
+            }
+            await _bot.AnswerCallbackQuery(callbackQuery.Id);
+            return;
+        }
+        if (data.StartsWith("commit:", StringComparison.Ordinal))
+        {
+            var sha = data["commit:".Length..];
+            if (string.IsNullOrWhiteSpace(sha))
+                return;
+
+            await HandleCommitDetailsAsync(chatId, sha);
+            return;
+        }
+        if (data.StartsWith("commits:page:",
+        StringComparison.Ordinal))
+        {
+            var pageText = data["commits:page:".Length..];
+            if (int.TryParse(pageText, out var page))
+            {
+                await HandleCommitsAsync(callbackQuery.Message!.Chat.Id, page);
+            }
+            await _bot.AnswerCallbackQuery(callbackQuery.Id);
+            return;
+        }
+    }
+    private async Task HandleRepositorySelectionCallbackAsync(
+    CallbackQuery callbackQuery,
+    string repository)
+    {
+        var chatId = callbackQuery.Message!.Chat.Id;
+        var session = GetSession(chatId);
+        if (string.IsNullOrWhiteSpace(session.PendingOwner))
+        {
+            await _bot.AnswerCallbackQuery(callbackQuery.Id, "Repository selection expired.");
+            return;
+        }
+        var owner = session.PendingOwner;
+
+        var repo = await _gitHubService.GetRepositoryAsync(owner, repository);
+        if (repo is null)
+        {
+            await _bot.AnswerCallbackQuery(callbackQuery.Id, "Repository not found.");
+            return;
+        }
+        session.ActiveRepository = new ActiveRepository
+        {
+            Owner = owner,
+            Repository = repository
+        };
+        session.PendingOwner = null;
+        session.State = UserState.None;
+
+        await _bot.AnswerCallbackQuery(
+            callbackQuery.Id
+        );
+        await SendRepositoryInfoAsync(chatId, repo);
+    }
+    private string TruncateText(string text, int maxLength)
+    {
+        if (text.Length <= maxLength)
+            return text;
+        return text[..maxLength] + "...";
+    }
+    private string GetFileStatusEmoji(
+    string status)
+    {
+        return status switch
+        {
+            "added" => "🟢",
+            "modified" => "🟡",
+            "removed" => "🔴",
+            "renamed" => "🔵",
+            _ => "⚪"
+        };
     }
 }

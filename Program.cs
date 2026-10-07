@@ -1,21 +1,25 @@
-﻿using System.Data;
-using GitAssist.bot;
+﻿using GitAssist.bot;
 using GitAssist.Bot;
 using GitAssist.Configuration;
 using GitAssist.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
+using var cts = new CancellationTokenSource();
 
 var builder = Host.CreateApplicationBuilder(args);
+var app = builder.Build();
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
 var token = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
 if (string.IsNullOrWhiteSpace(token))
 {
-    Console.WriteLine("TELEGRAM_BOT_TOKEN is not set.");
+    logger.LogCritical("TELEGRAM_BOT_TOKEN is not set.");
     return;
 }
 builder.Services.AddSingleton(new BotSettings(token));
 builder.Services.AddSingleton<TelegramBotClient>(_ => new TelegramBotClient(token));
+builder.Services.AddSingleton<TelegramBotClient>(_ => new TelegramBotClient(token, cancellationToken: cts.Token));
 builder.Services.AddSingleton<ITelegramBotClient>(services =>services.GetRequiredService<TelegramBotClient>());
 builder.Services.AddSingleton<CommandHandler>();
 builder.Services.AddSingleton<TelegramBot>();
@@ -28,7 +32,6 @@ builder.Services.AddHttpClient<IGitHubService, GitHubService>(
         client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2026-03-10");
     }
 );
-
 using var host = builder.Build();
 var bot = host.Services.GetRequiredService<TelegramBot>();
 await bot.StartAsync();
