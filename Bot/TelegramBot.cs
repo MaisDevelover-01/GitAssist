@@ -21,19 +21,19 @@ public class TelegramBot
     public async Task StartAsync()
     {
         var me = await _bot.GetMe();//bot is getting its own information from the Telegram API
-        Console.WriteLine($"@{me.Username} is running...");
+       _logger.LogInformation( "@{Username} is running...", me.Username);
         _bot.OnError += HandleError;
         _bot.OnMessage += HandleMessage;
         _bot.OnUpdate += HandleUpdate;
         //bot is subscribing to the OnMessage event, which is triggered when a new message is received
-        Console.WriteLine("Git Assist is running!");
+        _logger.LogInformation("Git Assist is running!");
         await Task.Delay(Timeout.Infinite, _bot.GlobalCancelToken);
     }
     private async Task HandleMessage(Message message, UpdateType updateType)
     {
         if(message.Text is null)
             return;
-        Console.WriteLine($"Received: {message.Text}");
+        _logger.LogInformation($"Received: {message.Text}");
         try
         {
             await _commandHandler.HandleAsync(message);
@@ -73,10 +73,7 @@ public class TelegramBot
     }
     private async Task HandleError(Exception exception, Telegram.Bot.Polling.HandleErrorSource source)
     {
-        Console.WriteLine("Telegram bot error");
-        Console.WriteLine($"Source : {source}");
-        Console.WriteLine($"Message : {exception.Message}");
-        Console.WriteLine(exception);
+       _logger.LogError(exception, "Telegram bot error. Source: {Source}", source);
         await Task.CompletedTask;
     }
     private string BuildRateLimitMessage(GitHubRateLimitException exception)

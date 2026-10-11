@@ -36,3 +36,6 @@ appsettings.local.json
 # Temporary files
 *.tmp
 *.temp
+
+#env 
+.env

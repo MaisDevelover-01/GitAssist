@@ -1,0 +1,9 @@
+services:
+  gitassist:
+    build:
+      context: .
+    image: gitassist:latest
+    container_name: gitassist-bot
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required}
+    restart: unless-stopped
