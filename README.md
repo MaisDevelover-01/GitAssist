@@ -143,15 +143,7 @@ Hello-World
 
 ## 🗺️ Roadmap
 
-### v0.2.x
-
-- Issue details
-- Pull request details
-- Commit details
-- Better inline navigation
-- Pagination for repository and GitHub results
-
-### v0.3.x
+### v0.2.0
 
 - GitHub search
 - Branch browsing
