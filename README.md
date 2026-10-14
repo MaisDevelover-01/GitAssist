@@ -3,11 +3,9 @@
 **A Telegram bot for exploring GitHub repositories, issues, pull requests, and commits.**
 
 GitAssist is a Telegram bot built with C# and .NET 9 that helps developers explore public GitHub repositories directly from Telegram.
-GitAssist is a Telegram bot built with C# and .NET 9 that helps developers explore public GitHub repositories directly from Telegram.
 
 Users can select a GitHub account, browse its repositories, and inspect repository information, open issues, pull requests, and commits without leaving Telegram.
 
-Users can select a GitHub account, browse its repositories, and inspect repository information, open issues, pull requests, and commits without leaving Telegram.
 > 🚧 **Status:** Early public preview (`v0.1.0`)
 > The project is actively being developed, so features and APIs may change.
 
@@ -144,43 +142,6 @@ docker compose logs -f gitassist
 ```bash
 docker compose down
 ```
-
-Running Docker on your own computer does not provide 24/7 availability. To keep GitAssist available continuously, deploy it to a server that remains online.
-📦 Repository Exploration
-Browse public repositories by GitHub username.
-View repository information, including description, programming language, stars, forks, open issues, and default branch.
-Switch between repositories or GitHub accounts.
-Navigate through repository pages.
-🐛 Issues
-Browse open issues in a repository.
-View issue details, including title, description, author, labels, and timestamps.
-Navigate between issues using inline keyboard buttons.
-Move between pages of results.
-🔀 Pull Requests
-Browse open pull requests.
-View pull request details, including status, author, branches, changed files, commits, additions, and deletions.
-Open pull requests directly on GitHub.
-Navigate through paginated results.
-📝 Commits
-Browse recent commits.
-View commit messages, authors, timestamps, and change statistics.
-Inspect changed files and their additions and deletions.
-Open commits directly on GitHub.
-Navigate between pages of commits.
-
-⚙️ Reliability and Configuration
-Centralized handling of GitHub API errors.
-GitHub rate-limit error handling.
-Structured logging with ILogger.
-Environment-based configuration for the Telegram bot token.
-Docker and Docker Compose support.
-
-
-## 🎬 Demo
-
-_Add the demo GIF to `assets/demo.gif` before publishing._
-
-![Git Assist demo](assets/demo.gif)
 
 ## 🧭 How it works
 
@@ -336,27 +297,6 @@ Potential future improvements include:
 * Do not commit `.env` or other files containing secrets.
 * Keep credentials out of source code and container images.
 * Review configuration and access permissions before deploying the bot.
-### v0.2.0
-
-- GitHub search
-- Branch browsing
-- Better error and rate-limit handling
-- Automated tests
-
-### v1.0.0
-
-- Stable user experience
-- GitHub authentication
-- Private repository support
-- Notifications/background tasks
-- AI-assisted developer features
-- Production deployment
-
-## 🔐 Security Notes
-
-Git Assist currently uses a Telegram bot token supplied through an environment variable. Never place secrets directly in source code or commit them to Git.
-
-User session data is currently stored in memory and is lost when the application restarts.
 
 ## 🤝 Contributing
 
