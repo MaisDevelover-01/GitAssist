@@ -47,6 +47,7 @@ Users can select a GitHub account, browse its repositories, and inspect reposito
 * Structured logging with `ILogger`.
 * Environment-based configuration for the Telegram bot token.
 * Docker and Docker Compose support.
+* The bot keeps the user's current conversation state and selected repository in memory while the application is running.
 
 ## 🛠️ Tech Stack
 
@@ -143,16 +144,6 @@ docker compose logs -f gitassist
 docker compose down
 ```
 
-<<<<<<< HEAD
-=======
-Running Docker on your own computer does not provide 24/7 availability. To keep GitAssist available continuously, deploy it to a server that remains online.
-## 🎬 Demo
-
-_Add the demo GIF to `assets/demo.gif` before publishing._
-
-![Git Assist demo](assets/demo.gif)
-
->>>>>>> e7c78680f5b8e26dc332209d3f9cd9f14d834bc0
 ## 🧭 How it works
 
 ```text
@@ -166,8 +157,6 @@ GitHub Service
      ↓
 GitHub REST API
 ```
-
-The bot keeps the user's current conversation state and selected repository in memory while the application is running.
 
 ## 📁 Project Structure
 
@@ -244,29 +233,12 @@ Potential future improvements include:
 * AI-assisted repository exploration and commit or pull request summaries.
 * Further improvements to deployment, monitoring, and reliability.
 
-<<<<<<< HEAD
 ## 🔐 Security
 
 * Store the Telegram bot token in an environment variable.
 * Do not commit `.env` or other files containing secrets.
 * Keep credentials out of source code and container images.
 * Review configuration and access permissions before deploying the bot.
-=======
-### v1.0.0
-
-- Stable user experience
-- GitHub authentication
-- Private repository support
-- Notifications/background tasks
-- AI-assisted developer features
-- Production deployment
-
-## 🔐 Security Notes
-
-Git Assist currently uses a Telegram bot token supplied through an environment variable. Never place secrets directly in source code or commit them to Git.
-
-User session data is currently stored in memory and is lost when the application restarts.
->>>>>>> e7c78680f5b8e26dc332209d3f9cd9f14d834bc0
 
 ## 🤝 Contributing
 
