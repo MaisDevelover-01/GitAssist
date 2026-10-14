@@ -143,6 +143,16 @@ docker compose logs -f gitassist
 docker compose down
 ```
 
+<<<<<<< HEAD
+=======
+Running Docker on your own computer does not provide 24/7 availability. To keep GitAssist available continuously, deploy it to a server that remains online.
+## 🎬 Demo
+
+_Add the demo GIF to `assets/demo.gif` before publishing._
+
+![Git Assist demo](assets/demo.gif)
+
+>>>>>>> e7c78680f5b8e26dc332209d3f9cd9f14d834bc0
 ## 🧭 How it works
 
 ```text
@@ -158,28 +168,6 @@ GitHub REST API
 ```
 
 The bot keeps the user's current conversation state and selected repository in memory while the application is running.
-
-## 📖 How to Use
-
-1. Open GitAssist in Telegram.
-2. Send `/start`.
-3. Choose the GitHub username option.
-4. Enter a GitHub username.
-5. Select a repository from the inline keyboard.
-6. Explore repository information, issues, pull requests, or commits.
-7. Open an item to view its details and use the navigation buttons to browse additional results.
-
-Use `/help` to view the bot's available commands and instructions.
-🛠️ Tech Stack
-Language: C#
-Framework: .NET 9
-Bot Platform: Telegram Bot API
-External API: GitHub REST API
-Networking: HttpClient
-Dependency Injection: .NET Generic Host
-Logging: ILogger
-Containerization: Docker and Docker Compose
-Version Control: Git and GitHub
 
 ## 📁 Project Structure
 
@@ -225,41 +213,6 @@ GitAssist/
 * GitHub API rate limits may affect requests.
 * The bot must be running on a connected host to respond to Telegram messages.
 * AI-powered features and automatic repository notifications are not currently implemented.
-## 🚀 Getting Started
-
-Prerequisites
-
-To run GitAssist locally, you need:
-
-.NET 9 SDK
-A Telegram bot token
-Internet access to Telegram and the GitHub REST API
-
-To run the project with Docker, you also need Docker Desktop or another working Docker Engine with Docker Compose.
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/MaisDevelover-01/GitAssist.git
-cd GitAssist
-```
-
-###2. Configure the Telegram Bot Token
-Create a Telegram bot using BotFather and obtain its token.
-Set the token as an environment variable.
-PowerShell:
-
-$env:TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-
-Replace YOUR_TELEGRAM_BOT_TOKEN with your actual token.
-Never commit your real bot token to GitHub.
-
-###3. Restore Dependencies
-dotnet restore
-###4. Run the Application
-dotnet run
-
-Once the bot starts, open it in Telegram and send /start.
 
 ## 🧪 Example Flow
 
@@ -291,12 +244,29 @@ Potential future improvements include:
 * AI-assisted repository exploration and commit or pull request summaries.
 * Further improvements to deployment, monitoring, and reliability.
 
+<<<<<<< HEAD
 ## 🔐 Security
 
 * Store the Telegram bot token in an environment variable.
 * Do not commit `.env` or other files containing secrets.
 * Keep credentials out of source code and container images.
 * Review configuration and access permissions before deploying the bot.
+=======
+### v1.0.0
+
+- Stable user experience
+- GitHub authentication
+- Private repository support
+- Notifications/background tasks
+- AI-assisted developer features
+- Production deployment
+
+## 🔐 Security Notes
+
+Git Assist currently uses a Telegram bot token supplied through an environment variable. Never place secrets directly in source code or commit them to Git.
+
+User session data is currently stored in memory and is lost when the application restarts.
+>>>>>>> e7c78680f5b8e26dc332209d3f9cd9f14d834bc0
 
 ## 🤝 Contributing
 
