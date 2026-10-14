@@ -2,23 +2,44 @@
 
 A Telegram-based GitHub assistant for developers.
 
-Git Assist lets you browse a GitHub account, choose a repository, and quickly inspect repository information, open issues, pull requests, and recent commits — directly from Telegram.
+GitAssist is a Telegram bot built with C# and .NET 9 that helps developers explore public GitHub repositories directly from Telegram.
+
+Users can select a GitHub account, browse its repositories, and inspect repository information, open issues, pull requests, and commits without leaving Telegram.
 
 > 🚧 **Status:** Early public preview (`v0.1.0`)
->
 > The project is actively being developed, so features and APIs may change.
 
 ## ✨ Features
 
-- 👤 Enter a GitHub username
-- 📦 Browse public repositories for that owner
-- 🔄 Change repository without re-entering the owner
-- 👤 Change GitHub owner
-- 📊 View repository information
-- 🐛 Browse open issues
-- 🔀 Browse open pull requests
-- 📝 Browse recent commits
-- 💬 Telegram reply and inline keyboards for navigation
+📦 Repository Exploration
+Browse public repositories by GitHub username.
+View repository information, including description, programming language, stars, forks, open issues, and default branch.
+Switch between repositories or GitHub accounts.
+Navigate through repository pages.
+🐛 Issues
+Browse open issues in a repository.
+View issue details, including title, description, author, labels, and timestamps.
+Navigate between issues using inline keyboard buttons.
+Move between pages of results.
+🔀 Pull Requests
+Browse open pull requests.
+View pull request details, including status, author, branches, changed files, commits, additions, and deletions.
+Open pull requests directly on GitHub.
+Navigate through paginated results.
+📝 Commits
+Browse recent commits.
+View commit messages, authors, timestamps, and change statistics.
+Inspect changed files and their additions and deletions.
+Open commits directly on GitHub.
+Navigate between pages of commits.
+
+⚙️ Reliability and Configuration
+Centralized handling of GitHub API errors.
+GitHub rate-limit error handling.
+Structured logging with ILogger.
+Environment-based configuration for the Telegram bot token.
+Docker and Docker Compose support.
+
 
 ## 🎬 Demo
 
@@ -42,17 +63,16 @@ GitHub REST API
 
 The bot keeps the user's current conversation state and selected repository in memory while the application is running.
 
-## 🛠 Tech Stack
-
-- C#
-- .NET 9
-- Telegram.Bot
-- GitHub REST API
-- `HttpClient`
-- `System.Text.Json`
-- Dependency Injection
-- LINQ
-- Async/Await
+🛠️ Tech Stack
+Language: C#
+Framework: .NET 9
+Bot Platform: Telegram Bot API
+External API: GitHub REST API
+Networking: HttpClient
+Dependency Injection: .NET Generic Host
+Logging: ILogger
+Containerization: Docker and Docker Compose
+Version Control: Git and GitHub
 
 ## 📁 Project Structure
 
@@ -81,16 +101,21 @@ GitAssist/
 │   └── GitHubService.cs
 │
 ├── Program.cs
+|── Dockerfile
 └── README.md
 ```
 
 ## 🚀 Getting Started
 
-### Prerequisites
+Prerequisites
 
-- .NET 9 SDK
-- A Telegram bot token from [@BotFather](https://t.me/BotFather)
-- Internet access to Telegram Bot API and GitHub API
+To run GitAssist locally, you need:
+
+.NET 9 SDK
+A Telegram bot token
+Internet access to Telegram and the GitHub REST API
+
+To run the project with Docker, you also need Docker Desktop or another working Docker Engine with Docker Compose.
 
 ### 1. Clone the repository
 
@@ -99,28 +124,22 @@ git clone https://github.com/MaisDevelover-01/GitAssist.git
 cd GitAssist
 ```
 
-### 2. Set the Telegram bot token
-
-Git Assist reads the token from the `TELEGRAM_BOT_TOKEN` environment variable.
-
+###2. Configure the Telegram Bot Token
+Create a Telegram bot using BotFather and obtain its token.
+Set the token as an environment variable.
 PowerShell:
 
-```powershell
-$env:TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
-```
+$env:TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 
-Do **not** commit the bot token to the repository.
+Replace YOUR_TELEGRAM_BOT_TOKEN with your actual token.
+Never commit your real bot token to GitHub.
 
-### 3. Run the bot
-
-```bash
+###3. Restore Dependencies
 dotnet restore
+###4. Run the Application
 dotnet run
-```
 
-### 4. Open the bot in Telegram
-
-[Open Git Assist on Telegram](https://t.me/GitAssistDeveloperBot)
+Once the bot starts, open it in Telegram and send /start.
 
 ## 🧪 Example Flow
 
