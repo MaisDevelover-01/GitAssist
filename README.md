@@ -9,6 +9,12 @@ The bot is running on a connected host to respond to Telegram messages.
 > 🚧 **Status:** Early public preview (`v0.1.0`)
 > The project is actively being developed, so features and APIs may change.
 
+## 🎬 Demo
+
+Here's a short demonstration of GitAssist in action.
+
+![GitAssist Demo](assets/gitassist-demo.gif)
+
 ## ✨ Features
 
 ### 📦 Repository Exploration
