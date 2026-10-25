@@ -1,6 +1,5 @@
 using GitAssist.bot;
 using GitAssist.Models;
-
 namespace GitAssist.Bot;
 
 public class UserSession

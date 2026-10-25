@@ -3,8 +3,8 @@
 **A Telegram bot for exploring GitHub repositories, issues, pull requests, and commits.**
 
 GitAssist is a Telegram bot built with C# and .NET 9 that helps developers explore public GitHub repositories directly from Telegram.
-
 Users can select a GitHub account, browse its repositories, and inspect repository information, open issues, pull requests, and commits without leaving Telegram.
+The bot is running on a connected host to respond to Telegram messages.
 
 > 🚧 **Status:** Early public preview (`v0.1.0`)
 > The project is actively being developed, so features and APIs may change.
@@ -107,42 +107,138 @@ dotnet restore
 ```bash
 dotnet run
 ```
-
 Once the bot starts, open it in Telegram and send `/start`.
 
-## 🐳 Running with Docker Compose
+## Docker
 
-Docker Compose provides a convenient way to build and run GitAssist in a container.
+GitAssist can be built and run inside a Docker container.
 
-### 1. Configure the Environment
+### Prerequisites
 
-Create a `.env` file in the project root, next to `docker-compose.yml`:
+* Docker Desktop or Docker Engine
+* A Telegram bot token obtained from [@BotFather](https://t.me/BotFather)
 
-```dotenv
-TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
-```
+### Build the Docker Image
 
-Replace the placeholder with your actual token.
-
-**Important:** Keep `.env` out of version control. Make sure it is listed in `.gitignore` and `.dockerignore`.
-
-### 2. Build and Start the Container
+Clone the repository and navigate to the project directory:
 
 ```bash
-docker compose up --build -d
+git clone https://github.com/MaisDevelover-01/GitAssist.git
+cd GitAssist
 ```
 
-### 3. View Logs
+Build the Docker image:
 
 ```bash
-docker compose logs -f gitassist
+docker build -t gitassist .
 ```
 
-### 4. Stop the Application
+### Configure Environment Variables
+
+Create a `.env` file in the project root directory:
+
+```env
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+```
+
+Replace `your_telegram_bot_token` with your actual Telegram bot token.
+
+**Security note:** Never commit your `.env` file or expose your bot token in source code, logs, screenshots, or public repositories.
+
+Make sure `.env` is excluded by both `.gitignore` and `.dockerignore`.
+
+### Run the Container
+
+Start GitAssist using the environment variables from `.env`:
 
 ```bash
-docker compose down
+docker run -d \
+  --name gitassist-local \
+  -p 10000:10000 \
+  --env-file .env \
+  -e PORT=10000 \
+  gitassist
 ```
+
+The application exposes an HTTP health endpoint at:
+
+```text
+http://localhost:10000/health
+```
+
+A successful health check returns:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+To inspect the container logs:
+
+```bash
+docker logs gitassist-local
+```
+
+To stop the container:
+
+```bash
+docker stop gitassist-local
+```
+
+The Docker image uses a multi-stage build to separate compilation from the final ASP.NET Core runtime image.
+
+## Deployment
+
+GitAssist can be deployed to [Render](https://render.com/) as a Docker-based Web Service.
+
+### Deploy to Render
+
+1. Push the project to a GitHub repository.
+
+2. Open the [Render Dashboard](https://dashboard.render.com/).
+
+3. Select **New → Web Service**.
+
+4. Connect your GitHub account and select the `GitAssist` repository.
+
+5. Choose the branch you want to deploy, usually `main`.
+
+6. Select **Docker** as the runtime and specify the path to the project's `Dockerfile`.
+
+7. Under **Environment Variables**, add the following variable:
+
+   | Key                  | Value                   |
+   | -------------------- | ----------------------- |
+   | `TELEGRAM_BOT_TOKEN` | Your Telegram bot token |
+
+8. Set the health check path to `/health`, if the option is available in the service settings.
+
+9. Create the service and monitor the build and deployment logs.
+
+Render builds the Docker image from the repository's `Dockerfile` and starts the application. The application reads the `PORT` environment variable to bind its HTTP server to the port provided by the hosting platform.
+
+### Verify the Deployment
+
+After deployment, open:
+
+```text
+https://YOUR-SERVICE-NAME.onrender.com/health
+```
+
+Replace `YOUR-SERVICE-NAME` with your actual Render service name.
+
+A successful response should look like this:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+The root endpoint `/` also returns a simple message confirming that the web server is running.
+
+For more information, see the official [Render Docker deployment documentation](https://render.com/docs/docker) and [Web Services documentation](https://render.com/docs/web-services).
 
 ## 🧭 How it works
 
@@ -165,6 +261,7 @@ GitAssist/
 ├── Bot/
 │   ├── CommandHandler.cs
 │   ├── TelegramBot.cs
+│   ├── TelegramBotHosttedService.cs
 │   ├── UserSession.cs
 │   └── UserState.cs
 │
@@ -177,6 +274,7 @@ GitAssist/
 │   ├── CommitsInfo.cs
 │   ├── IssueInfo.cs
 │   ├── PagedResult.cs
+│   ├── PullRequestInfo.cs
 │   ├── RepositoryInfo.cs
 │   └── RepositorySummery.cs
 │
@@ -196,31 +294,19 @@ GitAssist/
 └── README.md
 ```
 
-## ⚠️ Current Limitations
+## Limitations
 
-* GitAssist currently focuses on public GitHub repositories.
-* GitHub API rate limits may affect requests.
-* The bot must be running on a connected host to respond to Telegram messages.
-* AI-powered features and automatic repository notifications are not currently implemented.
+GitAssist is an educational and portfolio project. The following limitations apply to its current implementation:
 
-## 🧪 Example Flow
+* **Public repositories:** GitHub API requests are currently unauthenticated, so the bot is limited to publicly accessible repository data. Private repository access would require GitHub authentication.
+* **GitHub API rate limits:** Unauthenticated GitHub REST API requests are generally limited to 60 requests per hour per IP address. GitAssist includes handling for GitHub API errors and rate-limit responses.
+* **Read-only functionality:** The bot focuses on retrieving repository information, issues, and pull request data. Creating or modifying issues and pull requests is not currently supported.
+* **In-memory session state:** User session information is stored in memory and may be lost when the application restarts or redeploys.
+* **Free hosting limitations:** Free Render Web Services can spin down after 15 minutes without inbound traffic. Waking a service can take approximately one minute, so uninterrupted bot availability is not guaranteed.
+* **Production readiness:** The project is intended for learning, experimentation, and demonstration purposes. Production use would require additional reliability, security, and monitoring considerations.
 
-```text
-/start
-   ↓
-👤 GitHub Username
-   ↓
-octocat
-   ↓
-Choose Repository
-   ↓
-Hello-World
-   ↓
-📦 Repository Info
-🐛 Issues
-🔀 Pull Requests
-📝 Commits
-```
+For the latest information about GitHub API limits, see the official [GitHub REST API rate-limit documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
+
 
 ## 🗺️ Roadmap
 

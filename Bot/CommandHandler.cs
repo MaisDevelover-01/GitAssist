@@ -772,6 +772,30 @@ public class CommandHandler
             return;
         }
         var chatId = callbackQuery.Message.Chat.Id;
+        // Handle Change Owner button first.
+        if (data == "repo:change_owner")
+        {
+            var session = GetSession(chatId);
+            session.PendingOwner = null;
+
+            // Use the same state that handles entering a GitHub username.
+            session.State = UserState.WaitingForOwner;
+
+            await _bot.SendMessage(chatId, "👤 Please enter the new GitHub username:");
+            return;
+        }
+        // Handle repository selection.
+        if (data.StartsWith("repo:", StringComparison.Ordinal))
+        {
+            var repository = data["repo:".Length..];
+
+            if (string.IsNullOrWhiteSpace(repository))
+            {
+                return;
+            }
+            await HandleRepositorySelectionCallbackAsync(callbackQuery, repository);
+            return;
+        }
         if (data.StartsWith("repos:page:",StringComparison.Ordinal))
         {
             var pageText = data["repos:page:".Length..];
@@ -854,23 +878,20 @@ public class CommandHandler
             return;
         }
     }
-    private async Task HandleRepositorySelectionCallbackAsync(
-    CallbackQuery callbackQuery,
-    string repository)
+    private async Task HandleRepositorySelectionCallbackAsync(CallbackQuery callbackQuery, string repository)
     {
         var chatId = callbackQuery.Message!.Chat.Id;
         var session = GetSession(chatId);
         if (string.IsNullOrWhiteSpace(session.PendingOwner))
         {
-            await _bot.AnswerCallbackQuery(callbackQuery.Id, "Repository selection expired.");
+            await _bot.SendMessage(chatId, "Repository selection expired. Please select the owner again.");
             return;
         }
         var owner = session.PendingOwner;
-
         var repo = await _gitHubService.GetRepositoryAsync(owner, repository);
         if (repo is null)
         {
-            await _bot.AnswerCallbackQuery(callbackQuery.Id, "Repository not found.");
+            await _bot.SendMessage(chatId, "❌ Repository not found.");
             return;
         }
         session.ActiveRepository = new ActiveRepository
@@ -880,10 +901,6 @@ public class CommandHandler
         };
         session.PendingOwner = null;
         session.State = UserState.None;
-
-        await _bot.AnswerCallbackQuery(
-            callbackQuery.Id
-        );
         await SendRepositoryInfoAsync(chatId, repo);
     }
     private string TruncateText(string text, int maxLength)
